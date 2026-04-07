@@ -1,3 +1,13 @@
+---
+title: AI Code Review Environment
+emoji: 🔍
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+sdk_version: latest
+pinned: false
+---
+
 # AI Code Review Environment
 
 ## Environment Overview and Motivation

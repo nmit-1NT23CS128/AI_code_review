@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -121,9 +122,202 @@ def score():
 def health():
     return {"status": "ok"}
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 def root():
-    return {"status": "ok"}
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>AI Code Review Environment</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1e1e1e; color: #e0e0e0; }
+            .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+            header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #0066cc; padding-bottom: 20px; }
+            h1 { color: #00bfff; font-size: 2.5em; margin-bottom: 10px; }
+            .subtitle { color: #888; font-size: 1.1em; }
+            
+            .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+            .panel { background: #2d2d2d; border: 1px solid #0066cc; border-radius: 8px; padding: 20px; }
+            .panel h2 { color: #00bfff; margin-bottom: 15px; font-size: 1.3em; }
+            
+            .code-display { background: #1a1a1a; border: 1px solid #444; padding: 15px; border-radius: 5px; font-family: monospace; line-height: 1.6; overflow-x: auto; max-height: 400px; }
+            .code-display pre { margin: 0; }
+            .code-line { padding: 2px 5px; }
+            .code-line.issue { background: #6b2c2c; color: #ff6b6b; }
+            .code-line.found { background: #2c6b2c; color: #6bff6b; }
+            
+            .status { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
+            .stat { background: #1a1a1a; padding: 10px; border-radius: 5px; border-left: 3px solid #0066cc; }
+            .stat-label { color: #888; font-size: 0.9em; }
+            .stat-value { color: #00bfff; font-size: 1.8em; font-weight: bold; }
+            
+            .action-panel { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 15px 0; }
+            button { background: #0066cc; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 1em; }
+            button:hover { background: #0052a3; }
+            button:disabled { background: #555; cursor: not-allowed; }
+            input { background: #1a1a1a; border: 1px solid #0066cc; color: #e0e0e0; padding: 8px; border-radius: 3px; }
+            
+            .reward-display { font-size: 1.2em; padding: 10px; border-radius: 5px; text-align: center; margin: 10px 0; }
+            .reward-positive { background: #2c6b2c; color: #6bff6b; }
+            .reward-negative { background: #6b2c2c; color: #ff6b6b; }
+            
+            .full-width { grid-column: 1 / -1; }
+            .message { padding: 10px; border-radius: 5px; background: #2c3e50; border-left: 3px solid #0066cc; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>🔍 AI Code Review Environment</h1>
+                <p class="subtitle">Reinforcement Learning for Bug Detection</p>
+            </header>
+            
+            <div class="main-grid">
+                <div class="panel">
+                    <h2>Code to Review</h2>
+                    <div class="code-display">
+                        <pre id="codeDisplay">Loading...</pre>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <h2>Episode Status</h2>
+                    <div class="status">
+                        <div class="stat">
+                            <div class="stat-label">Task</div>
+                            <div class="stat-value" id="taskName">-</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Step</div>
+                            <div class="stat-value" id="stepCount">-/-</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Issues Found</div>
+                            <div class="stat-value" id="issuesFound">0</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-label">Score</div>
+                            <div class="stat-value" id="score">0%</div>
+                        </div>
+                    </div>
+                    <div id="rewardDisplay" style="display:none;"></div>
+                    <button onclick="resetEnv()" style="width: 100%; margin-top: 10px;">🔄 Reset Episode</button>
+                </div>
+            </div>
+            
+            <div class="panel full-width">
+                <h2>Flag a Bug</h2>
+                <div class="action-panel">
+                    <input type="number" id="lineNumber" placeholder="Line number" min="1" max="20">
+                    <input type="text" id="issueType" placeholder="Issue type (e.g., syntax, logic, security)">
+                    <input type="text" id="comment" placeholder="Brief explanation">
+                </div>
+                <button onclick="flagBug()" style="width: 100%;">✅ Submit Action</button>
+                <div id="message" class="message" style="display:none; margin-top: 10px;"></div>
+            </div>
+        </div>
+        
+        <script>
+            async function resetEnv() {
+                try {
+                    const response = await fetch('/reset', { method: 'POST' });
+                    const data = await response.json();
+                    updateUI(data);
+                    showMessage('✅ Episode reset!', 'success');
+                } catch (e) {
+                    showMessage('Error resetting: ' + e.message, 'error');
+                }
+            }
+            
+            async function flagBug() {
+                const lineNumber = parseInt(document.getElementById('lineNumber').value);
+                const issueType = document.getElementById('issueType').value;
+                const comment = document.getElementById('comment').value;
+                
+                if (!lineNumber || !issueType || !comment) {
+                    showMessage('Please fill all fields', 'error');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/step', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action_type: 'FLAG_BUG',
+                            line_number: lineNumber,
+                            issue_type: issueType,
+                            comment: comment
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    const reward = data.reward;
+                    const done = data.done;
+                    
+                    updateUI(data.observation);
+                    showReward(reward);
+                    
+                    document.getElementById('lineNumber').value = '';
+                    document.getElementById('issueType').value = '';
+                    document.getElementById('comment').value = '';
+                    
+                    if (done) {
+                        showMessage('✅ Episode finished! Click Reset to start a new one.', 'success');
+                    }
+                } catch (e) {
+                    showMessage('Error: ' + e.message, 'error');
+                }
+            }
+            
+            function updateUI(obs) {
+                document.getElementById('taskName').textContent = obs.task_name.toUpperCase();
+                document.getElementById('stepCount').textContent = obs.step_number + '/' + obs.max_steps;
+                document.getElementById('issuesFound').textContent = obs.issues_found_so_far.length;
+                
+                const codeLines = obs.code_snippet.split('\\n');
+                let htmlCode = '';
+                codeLines.forEach((line, idx) => {
+                    const lineNum = idx + 1;
+                    htmlCode += '<span class="code-line' + (obs.issues_found_so_far.includes(lineNum) ? ' found' : '') + '">' + lineNum + ': ' + (line || ' ') + '</span>\\n';
+                });
+                document.getElementById('codeDisplay').innerHTML = '<pre>' + htmlCode + '</pre>';
+                
+                updateScore();
+            }
+            
+            async function updateScore() {
+                try {
+                    const response = await fetch('/score');
+                    const data = await response.json();
+                    const scorePercent = Math.round(data.score * 100);
+                    document.getElementById('score').textContent = scorePercent + '%';
+                } catch (e) {}
+            }
+            
+            function showReward(reward) {
+                const display = document.getElementById('rewardDisplay');
+                const rewardText = reward > 0 ? '✅ +' + reward.toFixed(2) : '❌ ' + reward.toFixed(2);
+                const className = reward > 0 ? 'reward-positive' : 'reward-negative';
+                display.innerHTML = '<div class="reward-display ' + className + '">' + rewardText + '</div>';
+                display.style.display = 'block';
+                setTimeout(() => { display.style.display = 'none'; }, 3000);
+            }
+            
+            function showMessage(msg, type) {
+                const msgEl = document.getElementById('message');
+                msgEl.textContent = msg;
+                msgEl.style.display = 'block';
+                msgEl.style.borderLeftColor = type === 'error' ? '#ff6b6b' : '#6bff6b';
+            }
+            
+            // Load initial state
+            window.onload = () => { resetEnv(); };
+        </script>
+    </body>
+    </html>
+    """
 
 
 def main():

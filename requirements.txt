@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+pydantic
+requests
+stable-baselines3[extra]

@@ -1,0 +1,4 @@
+name: code-review-env
+version: 1.0
+description: AI code review environment
+entrypoint: server.app:app

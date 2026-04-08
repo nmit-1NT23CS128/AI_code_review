@@ -11,6 +11,7 @@ class Observation(BaseModel):
     max_steps: int
     issues_found_so_far: List[int]
     task_name: str
+    score: float
 
 class Action(BaseModel):
     action_type: str
@@ -29,7 +30,7 @@ class Env:
     for i in range(len(nums) + 1):
         total += nums[i]
     return total / len(nums)""",
-                "issues": [2, 5, 8],
+                "issues": [2, 5, 7],
                 "max_steps": 8
             },
             "medium": {
@@ -38,7 +39,7 @@ def get_user(user_id):
     query = f"SELECT * FROM users WHERE id = {user_id}"
     result = db.execute(query).fetchone()
     return result""",
-                "issues": [3, 4, 5, 6],
+                "issues": [1, 3, 4, 5],
                 "max_steps": 12
             },
             "hard": {
@@ -96,7 +97,8 @@ def get_user(user_id):
             step_number=self.step,
             max_steps=self.max_steps,
             issues_found_so_far=self.found,
-            task_name=self.task_name
+            task_name=self.task_name,
+            score=len(self.found) / len(self.issues) if self.issues else 0.0
         )
 
 env = Env()
@@ -284,7 +286,8 @@ def root():
                 });
                 document.getElementById('codeDisplay').innerHTML = '<pre>' + htmlCode + '</pre>';
                 
-                updateScore();
+                const scorePercent = Math.round((obs.score || 0) * 100);
+                document.getElementById('score').textContent = scorePercent + '%';
             }
             
             async function updateScore() {

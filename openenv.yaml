@@ -2,3 +2,32 @@ name: code-review-env
 version: 1.0
 description: AI code review environment
 entrypoint: server.app:app
+observation_space:
+  type: object
+  properties:
+    code_snippet:
+      type: string
+    step_number:
+      type: integer
+    max_steps:
+      type: integer
+    issues_found_so_far:
+      type: array
+      items:
+        type: integer
+    task_name:
+      type: string
+action_space:
+  type: object
+  properties:
+    action_type:
+      type: string
+    line_number:
+      type: integer
+      nullable: true
+    issue_type:
+      type: string
+      nullable: true
+    comment:
+      type: string
+      nullable: true

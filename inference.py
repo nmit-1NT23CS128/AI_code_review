@@ -129,6 +129,30 @@ What action do you take next? Respond with JSON action."""
         return get_fallback_action(observation, 0)
 
 
+def safe_json_request(method, url, **kwargs):
+    try:
+        response = requests.request(method, url, timeout=10, **kwargs)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as exc:
+        raise RuntimeError(f"Request failed for {url}: {exc}") from exc
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid JSON response from {url}: {exc}") from exc
+
+
+def validate_action(action):
+    if not isinstance(action, dict):
+        return False
+    if not isinstance(action.get("action_type"), str):
+        return False
+    line_number = action.get("line_number")
+    if line_number is not None and not isinstance(line_number, int):
+        return False
+    return True
+
+
 def run_suite():
     """Main execution function - runs all tasks."""
     print(f"[START] task=baseline env=code-review model={MODEL_NAME}", flush=True)
@@ -140,12 +164,15 @@ def run_suite():
         rewards = []
         steps = 0
         
-        # Reset environment
-        res = requests.post(f"{API_BASE_URL}/reset", timeout=10).json()
+        try:
+            res = safe_json_request("POST", f"{API_BASE_URL}/reset")
+        except RuntimeError as exc:
+            print(f"[ERROR] Failed to reset environment: {exc}", flush=True)
+            return
         
-        if "task_name" not in res or "max_steps" not in res:
+        if not isinstance(res, dict) or "task_name" not in res or "max_steps" not in res:
             print(f"[ERROR] Invalid reset response: {res}", flush=True)
-            continue
+            return
             
         done = False
         
@@ -153,12 +180,30 @@ def run_suite():
         
         while not done and steps < 50:  # Safety limit
             action = get_action_from_model(res)
-            
-            response = requests.post(f"{API_BASE_URL}/step", json=action, timeout=10).json()
-            
-            reward = float(response.get("reward", -0.2))
-            done = response.get("done", False)
+            if not validate_action(action):
+                print(f"[WARN] Invalid action from model, using fallback: {action}", flush=True)
+                action = get_fallback_action(res, steps)
+
+            try:
+                response = safe_json_request("POST", f"{API_BASE_URL}/step", json=action)
+            except RuntimeError as exc:
+                print(f"[ERROR] Failed to send action: {exc}", flush=True)
+                return
+
+            if not isinstance(response, dict):
+                print(f"[ERROR] Invalid step response: {response}", flush=True)
+                return
+
+            try:
+                reward = float(response.get("reward", -0.2))
+            except (TypeError, ValueError):
+                reward = -0.2
+
+            done = bool(response.get("done", False))
             res = response.get("observation", {})
+            if not isinstance(res, dict):
+                print(f"[ERROR] Invalid observation: {res}", flush=True)
+                return
             
             steps += 1
             rewards.append(reward)
@@ -169,13 +214,14 @@ def run_suite():
                 break
         
         # Calculate final score
-        if res and "issues_found_so_far" in res:
+        if res and isinstance(res, dict) and "issues_found_so_far" in res:
             final_score = len(res["issues_found_so_far"]) / 4
         else:
             try:
-                score_res = requests.get(f"{API_BASE_URL}/score", timeout=10).json()
-                final_score = score_res.get("score", 0)
-            except:
+                score_res = safe_json_request("GET", f"{API_BASE_URL}/score")
+                final_score = float(score_res.get("score", 0))
+            except RuntimeError as exc:
+                print(f"[WARN] Failed to retrieve score: {exc}", flush=True)
                 final_score = 0
         
         all_scores.append(final_score)

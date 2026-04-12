@@ -3,18 +3,16 @@ import requests
 import json
 from openai import OpenAI
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:7860").rstrip("/")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
-API_KEY = os.getenv("API_KEY")
+# ✅ STRICT: use ONLY injected environment variables (no defaults)
+API_BASE_URL = os.environ["API_BASE_URL"].rstrip("/")
+MODEL_NAME = os.environ["MODEL_NAME"]
+API_KEY = os.environ["API_KEY"]
 
-# If no API key, use fallback mode
-USE_FALLBACK = not API_KEY
-openai_client = None
-if not USE_FALLBACK:
-    print(f"[INFO] Using proxy API with model: {MODEL_NAME}", flush=True)
-    openai_client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
-else:
-    print(f"[INFO] API_KEY not set. Using fallback heuristic agent.", flush=True)
+# ✅ Initialize OpenAI client with THEIR proxy
+openai_client = OpenAI(
+    api_key=API_KEY,
+    base_url=API_BASE_URL
+)
 
 SYSTEM_PROMPT = """You are an expert code reviewer AI agent. Your task is to analyze code snippets for bugs and issues.
 
@@ -33,53 +31,15 @@ Guidelines:
 Respond only with valid JSON action."""
 
 
-def get_fallback_action(observation, step_in_task):
-    """
-    Fallback heuristic agent when HF_TOKEN is not available.
-    Uses simple pattern matching to find common bugs.
-    """
-    task_name = observation.get("task_name", "easy")
-    issues_found = set(observation.get("issues_found_so_far", []))
-    max_issues = {"easy": 3, "medium": 4, "hard": 5}.get(task_name, 3)
-    
-    # Heuristic: try lines in a pattern based on task difficulty
-    if task_name == "easy":
-        candidate_lines = [2, 5, 7]  # Known positions for easy task
-    elif task_name == "medium":
-        candidate_lines = [1, 3, 4, 5]  # Known positions for medium task
-    else:  # hard
-        candidate_lines = [3, 4, 6, 7, 8]  # Known positions for hard task
-    
-    # Return the next unfound issue
-    for line in candidate_lines:
-        if line not in issues_found:
-            return {
-                "action_type": "FLAG_BUG",
-                "line_number": line,
-                "issue_type": "bug",
-                "comment": f"Potential issue detected at line {line}"
-            }
-    
-    # If all known issues found, return no action
-    return {
-        "action_type": "FLAG_BUG",
-        "line_number": None,
-        "issue_type": "none",
-        "comment": "No action"
-    }
-
-
 def get_action_from_model(observation):
-    """Get action from proxy API or use fallback."""
-    if USE_FALLBACK:
-        return get_fallback_action(observation, 0)
-    
+    """Always use LLM via proxy (no fallback)."""
+
     code = observation["code_snippet"]
     task = observation["task_name"]
     step = observation["step_number"]
     max_steps = observation["max_steps"]
     found = observation["issues_found_so_far"]
-    
+
     user_prompt = f"""Task: {task}
 Current step: {step}/{max_steps}
 Issues found so far: {found}
@@ -93,33 +53,33 @@ What action do you take next? Respond with JSON action."""
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt}
     ]
-    
-    try:
-        response = openai_client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            max_tokens=200,
-            temperature=0.1
-        )
-        generated_text = response.choices[0].message.content
 
-        # Extract JSON from the response
-        start = generated_text.find("{")
-        end = generated_text.rfind("}") + 1
-        if start != -1 and end > start:
-            json_str = generated_text[start:end]
-            action = json.loads(json_str)
-            return action
-        else:
-            return {
-                "action_type": "FLAG_BUG",
-                "line_number": None,
-                "issue_type": "none",
-                "comment": "Model error"
-            }
-    except Exception as e:
-        print(f"[WARN] Error calling proxy API: {e}, using fallback", flush=True)
-        return get_fallback_action(observation, 0)
+    response = openai_client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        max_tokens=200,
+        temperature=0.1
+    )
+
+    generated_text = response.choices[0].message.content or ""
+
+    # Extract JSON safely
+    start = generated_text.find("{")
+    end = generated_text.rfind("}") + 1
+
+    if start != -1 and end > start:
+        try:
+            return json.loads(generated_text[start:end])
+        except:
+            pass
+
+    # Minimal safe fallback (still after API call)
+    return {
+        "action_type": "FLAG_BUG",
+        "line_number": None,
+        "issue_type": "none",
+        "comment": "Parsing error"
+    }
 
 
 def safe_json_request(method, url, **kwargs):
@@ -174,8 +134,13 @@ def run_suite():
         while not done and steps < 50:  # Safety limit
             action = get_action_from_model(res)
             if not validate_action(action):
-                print(f"[WARN] Invalid action from model, using fallback: {action}", flush=True)
-                action = get_fallback_action(res, steps)
+                print(f"[WARN] Invalid action from model, using safe default: {action}", flush=True)
+                action = {
+                    "action_type": "FLAG_BUG",
+                    "line_number": None,
+                    "issue_type": "none",
+                    "comment": "Invalid action"
+                }
 
             try:
                 response = safe_json_request("POST", f"{API_BASE_URL}/step", json=action)

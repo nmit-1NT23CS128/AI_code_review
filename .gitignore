@@ -1,0 +1,31 @@
+﻿# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.Python
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+build-output*.log
+
+# Temporary files
+tmp_*
+test_*.py (keep test_hf_interface.py for reference but it's optional)
+.DS_Store
+
+# Environment
+.env
+.env.local

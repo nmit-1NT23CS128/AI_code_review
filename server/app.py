@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 app = FastAPI()
 
@@ -103,14 +103,19 @@ def get_user(user_id):
 
 env = Env()
 
-@app.post("/reset")
+@app.post("/reset", response_model=Observation)
 def reset():
     return env.reset()
 
 @app.post("/step")
-def step(action: Action):
+def step(action: Action) -> Dict[str, Any]:
     obs, reward, done, info = env.step_env(action)
-    return {"observation": obs, "reward": reward, "done": done, "info": info}
+    return {
+        "observation": obs.model_dump() if hasattr(obs, 'model_dump') else obs.dict(),
+        "reward": reward,
+        "done": done,
+        "info": info
+    }
 
 @app.get("/state")
 def state():

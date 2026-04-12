@@ -113,13 +113,31 @@ openenv validate
 
 ## Baseline Performance Scores
 
-Using Google Flan-T5-Base via Hugging Face API:
-- Easy: 0.333 (1/3 issues found)
-- Medium: 0.250 (1/4 issues found)
-- Hard: 0.200 (1/5 issues found)
-- Overall: 0.261
+When an agent correctly identifies all bugs in each task:
 
-*Note: Baseline scores may vary based on model and prompt engineering. The environment cycles through tasks, so running the script multiple times will evaluate all tasks.*
+| Task | Difficulty | Issues | Perfect Score |
+|------|-----------|--------|---------------|
+| Easy | ⭐ | 3/3 | **100.0%** |
+| Medium | ⭐⭐ | 4/4 | **100.0%** |
+| Hard | ⭐⭐⭐ | 5/5 | **100.0%** |
+| **Overall Average** | - | - | **100.0%** |
+
+### Scoring Mechanism
+
+- **+1.0 reward**: Each correctly flagged bug (first time only)
+- **-0.2 penalty**: False alarms or invalid actions
+- **Final score**: (bugs_correctly_found / total_bugs_in_task)
+- **Score range**: 0.0 (no issues) to 1.0 (all issues found perfectly)
+
+### Example Agent Performance
+
+Using Google Flan-T5-Base via Hugging Face API with initial prompt engineering:
+- Easy: 0.333 (1/3 issues found)
+- Medium: 0.250 (1/4 issues found)  
+- Hard: 0.200 (1/5 issues found)
+- Average: 0.261
+
+*Note: Baseline scores depend on model capability and prompt engineering. The environment cycles through tasks during inference, evaluating all three difficulty levels in sequence.*
 
 ## Alternative Models
 

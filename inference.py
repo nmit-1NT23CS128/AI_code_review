@@ -3,16 +3,16 @@ import requests
 import json
 import openai
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:7860")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:7860").rstrip("/")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
 API_KEY = os.getenv("API_KEY")
 
 # If no API key, use fallback mode
 USE_FALLBACK = not API_KEY
+openai_client = None
 if not USE_FALLBACK:
     print(f"[INFO] Using proxy API with model: {MODEL_NAME}", flush=True)
-    openai.api_base = API_BASE_URL
-    openai.api_key = API_KEY
+    openai_client = openai.OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
 else:
     print(f"[INFO] API_KEY not set. Using fallback heuristic agent.", flush=True)
 
@@ -95,7 +95,7 @@ What action do you take next? Respond with JSON action."""
     ]
     
     try:
-        response = openai.ChatCompletion.create(
+        response = openai_client.chat.completions.create(
             model=MODEL_NAME,
             messages=messages,
             max_tokens=200,

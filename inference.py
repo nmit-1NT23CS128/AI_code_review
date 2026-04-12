@@ -8,8 +8,8 @@ API_BASE_URL = os.environ["API_BASE_URL"].rstrip("/")
 MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-3.5-turbo")
 API_KEY = os.environ["API_KEY"]
 
-# Environment server URL (fixed for local testing)
-ENV_BASE_URL = "http://localhost:7860"
+# Environment server URL (same as API_BASE_URL in validation)
+ENV_BASE_URL = API_BASE_URL
 
 # ✅ Initialize OpenAI client with THEIR proxy
 openai_client = OpenAI(

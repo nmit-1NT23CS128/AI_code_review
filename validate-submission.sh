@@ -7,7 +7,7 @@
 # Prerequisites:
 #   - Docker:       https://docs.docker.com/get-docker/
 #   - openenv-core: pip install openenv-core
-# #   - curl (usually pre-installed)
+#   - curl (usually pre-installed)
 #
 # Run:
 #   curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/validate-submission.sh | bash -s -- <ping_url> [repo_dir]

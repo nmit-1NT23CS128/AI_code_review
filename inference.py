@@ -129,21 +129,19 @@ What action do you take next? Respond with JSON action."""
         return get_fallback_action(observation, 0)
 
 
-print(f"[START] task=baseline env=code-review model={MODEL_NAME}")
+def run_suite():
+    """Main execution function - runs all tasks."""
+    print(f"[START] task=baseline env=code-review model={MODEL_NAME}", flush=True)
 
-all_scores = []
-all_rewards = []
+    all_scores = []
+    all_rewards = []
 
-try:
     for task_idx in range(3):  # Run through all three tasks
         rewards = []
         steps = 0
         
-        try:
-            res = requests.post(f"{API_BASE_URL}/reset", timeout=10).json()
-        except Exception as e:
-            print(f"[ERROR] Failed to reset environment: {e}", flush=True)
-            continue
+        # Reset environment
+        res = requests.post(f"{API_BASE_URL}/reset", timeout=10).json()
         
         if "task_name" not in res or "max_steps" not in res:
             print(f"[ERROR] Invalid reset response: {res}", flush=True)
@@ -151,25 +149,12 @@ try:
             
         done = False
         
-        print(f"[TASK_START] task={res['task_name']} max_steps={res['max_steps']}")
+        print(f"[TASK_START] task={res['task_name']} max_steps={res['max_steps']}", flush=True)
         
         while not done and steps < 50:  # Safety limit
-            try:
-                action = get_action_from_model(res)
-            except Exception as e:
-                print(f"[ERROR] Failed to get action: {e}", flush=True)
-                action = {
-                    "action_type": "FLAG_BUG",
-                    "line_number": None,
-                    "issue_type": "none",
-                    "comment": "Action generation error"
-                }
+            action = get_action_from_model(res)
             
-            try:
-                response = requests.post(f"{API_BASE_URL}/step", json=action, timeout=10).json()
-            except Exception as e:
-                print(f"[ERROR] Failed to step environment: {e}", flush=True)
-                break
+            response = requests.post(f"{API_BASE_URL}/step", json=action, timeout=10).json()
             
             reward = float(response.get("reward", -0.2))
             done = response.get("done", False)
@@ -183,11 +168,9 @@ try:
             if done:
                 break
         
-        score = sum(rewards) / len(rewards) if rewards else 0
-        score = max(0, min(score, 1))
-        
+        # Calculate final score
         if res and "issues_found_so_far" in res:
-            final_score = len(res["issues_found_so_far"]) / 4  # Approximate max issues
+            final_score = len(res["issues_found_so_far"]) / 4
         else:
             try:
                 score_res = requests.get(f"{API_BASE_URL}/score", timeout=10).json()
@@ -199,13 +182,20 @@ try:
         all_rewards.extend(rewards)
         
         task_name = res.get('task_name', 'unknown')
-        print(f"[TASK_END] task={task_name} steps={steps} score={final_score:.3f} rewards={','.join(f'{r:.2f}' for r in rewards)}", flush=True)
+        print(f"[TASK_END] task={task_name} steps={steps} score={final_score:.3f}", flush=True)
 
     overall_score = sum(all_scores) / len(all_scores) if all_scores else 0
-    print(f"[END] success=true total_tasks=3 overall_score={overall_score:.3f} all_scores={','.join(f'{s:.3f}' for s in all_scores)}", flush=True)
+    print(f"[END] success=true total_tasks=3 overall_score={overall_score:.3f}", flush=True)
 
-except Exception as e:
-    print(f"[FATAL] Unhandled exception: {e}", flush=True)
-    import traceback
-    traceback.print_exc()
-    print(f"[END] success=false error={str(e)}", flush=True)
+
+if __name__ == "__main__":
+    try:
+        run_suite()
+    except requests.exceptions.ConnectionError:
+        print("[ERROR] Server offline. Start the server with: python -m uvicorn server.app:app --port 7860", flush=True)
+        exit(1)
+    except Exception as e:
+        print(f"[FATAL] Unhandled exception: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        exit(1)

@@ -1,19 +1,20 @@
 import os
 import requests
 import json
+import openai
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:7860")
-MODEL_NAME = os.getenv("MODEL_NAME", "google/flan-t5-base")
-HF_TOKEN = os.getenv("HF_TOKEN")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
+API_KEY = os.getenv("API_KEY")
 
-# If no HF token, use fallback mode
-USE_FALLBACK = not HF_TOKEN
-HF_API_URL = f"https://api-inference.huggingface.co/models/{MODEL_NAME}" if HF_TOKEN else None
-
+# If no API key, use fallback mode
+USE_FALLBACK = not API_KEY
 if not USE_FALLBACK:
-    print(f"[INFO] Using HuggingFace API with model: {MODEL_NAME}", flush=True)
+    print(f"[INFO] Using proxy API with model: {MODEL_NAME}", flush=True)
+    openai.api_base = API_BASE_URL
+    openai.api_key = API_KEY
 else:
-    print(f"[INFO] HF_TOKEN not set. Using fallback heuristic agent.", flush=True)
+    print(f"[INFO] API_KEY not set. Using fallback heuristic agent.", flush=True)
 
 SYSTEM_PROMPT = """You are an expert code reviewer AI agent. Your task is to analyze code snippets for bugs and issues.
 
@@ -69,7 +70,7 @@ def get_fallback_action(observation, step_in_task):
 
 
 def get_action_from_model(observation):
-    """Get action from HuggingFace API or use fallback."""
+    """Get action from proxy API or use fallback."""
     if USE_FALLBACK:
         return get_fallback_action(observation, 0)
     
@@ -88,27 +89,19 @@ Code to review:
 
 What action do you take next? Respond with JSON action."""
 
-    full_prompt = f"{SYSTEM_PROMPT}\n\n{user_prompt}"
-    
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    payload = {
-        "inputs": full_prompt,
-        "parameters": {
-            "max_new_tokens": 200,
-            "temperature": 0.1,
-            "do_sample": True
-        }
-    }
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt}
+    ]
     
     try:
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        result = response.json()
-        
-        if isinstance(result, list) and result:
-            generated_text = result[0].get("generated_text", "")
-        else:
-            generated_text = str(result)
+        response = openai.ChatCompletion.create(
+            model=MODEL_NAME,
+            messages=messages,
+            max_tokens=200,
+            temperature=0.1
+        )
+        generated_text = response.choices[0].message.content
         
         # Extract JSON from the response
         start = generated_text.find("{")
@@ -125,7 +118,7 @@ What action do you take next? Respond with JSON action."""
                 "comment": "Model error"
             }
     except Exception as e:
-        print(f"[WARN] Error calling HF API: {e}, using fallback", flush=True)
+        print(f"[WARN] Error calling proxy API: {e}, using fallback", flush=True)
         return get_fallback_action(observation, 0)
 
 

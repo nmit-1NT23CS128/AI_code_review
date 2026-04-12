@@ -2,4 +2,5 @@ fastapi
 uvicorn
 pydantic
 requests
+openai
 stable-baselines3[extra]
